@@ -1,9 +1,9 @@
 import {Text, View} from "react-native";
 
-export default function Index() {
+export default function Search() {
     return (
         <View>
-            <Text>Index</Text>
+            <Text>Search</Text>
         </View>
     );
 }
