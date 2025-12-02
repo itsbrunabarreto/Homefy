@@ -1,8 +1,16 @@
 import { StyleSheet, Text, View, TextInput, Pressable, Image} from "react-native";
 import {StatusBar} from "expo-status-bar";
 import {HouseIcon, BellRingingIcon, BookmarkIcon, MagnifyingGlassIcon, SlidersHorizontalIcon } from "phosphor-react-native";
+import { useRouter } from "expo-router";
+import { navigate } from "expo-router/build/global-state/routing";
 
-export default function Index() {
+export default function Home() {
+  const router = useRouter;
+  
+      function handleDetails() {
+          navigate("/stacks/details");
+      }
+  
   return (
     <View style={styles.container}>
       <StatusBar />
@@ -31,7 +39,7 @@ export default function Index() {
 
       <View style={styles.content}>
         <View style={styles.card}>
-          <Pressable style={styles.cardButton}>
+          <Pressable onPress={handleDetails} style={styles.cardButton}>
             <Image 
               style={styles.cardImage} 
               source={require("../assets/Room.jpg")}
