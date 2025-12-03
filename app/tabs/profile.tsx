@@ -1,17 +1,4 @@
-import { 
-    BellIcon, 
-    CreditCardIcon, 
-    EyeIcon, 
-    HouseIcon, 
-    InfoIcon, 
-    PencilSimpleIcon, 
-    ShieldCheckIcon, 
-    SignOutIcon 
-} from "phosphor-react-native";
-
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
-
+import React, { useState, useCallback } from "react";
 import { 
     View, 
     Text, 
@@ -19,18 +6,82 @@ import {
     TouchableOpacity, 
     ScrollView, 
     StyleSheet, 
-    Modal 
+    Modal,
+    ActivityIndicator 
 } from "react-native";
+import { useRouter, useFocusEffect } from "expo-router";
 
-import { auth } from "../../firebaseConfig";  
+// Ícones
+import { 
+    BellIcon, 
+    CreditCardIcon, 
+    HouseIcon, 
+    InfoIcon, 
+    PencilSimpleIcon, 
+    ShieldCheckIcon, 
+    SignOutIcon,
+    HouseLineIcon, // <--- NOVO ÍCONE PARA O ANÚNCIO
+} from "phosphor-react-native";
+
+// Firebase
+import { auth, db } from "../../firebaseConfig";
+import { doc, getDoc } from "firebase/firestore";
+import { signOut } from "firebase/auth";
+
 import ProfileOption from "../components/ProfileOption";
 
-
 export default function Profile() {
-
-    const user = auth.currentUser;
     const router = useRouter();
+    
+    // Estados
+    const [userData, setUserData] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+    // Carrega dados toda vez que a tela ganha foco
+    useFocusEffect(
+        useCallback(() => {
+            const fetchUserData = async () => {
+                const user = auth.currentUser;
+                
+                if (user) {
+                    try {
+                        const docRef = doc(db, "users", user.uid);
+                        const docSnap = await getDoc(docRef);
+
+                        if (docSnap.exists()) {
+                            setUserData(docSnap.data());
+                        }
+                    } catch (error) {
+                        console.error("Erro ao buscar perfil:", error);
+                    } finally {
+                        setLoading(false);
+                    }
+                } else {
+                    setLoading(false);
+                }
+            };
+
+            fetchUserData();
+        }, [])
+    );
+
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            router.replace("/stacks/login");
+        } catch (error) {
+            console.error("Erro ao sair:", error);
+        }
+    };
+
+    if (loading) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color="#1ab65c" />
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -38,7 +89,10 @@ export default function Profile() {
             {/* HEADER */}
             <View style={styles.header}>
                 <View style={styles.headerTitle}>
-                    <HouseIcon size={30} color="#1ab65c" weight="duotone" />
+                    <Image 
+                        source={require("../assets/logo.png")} 
+                        style={styles.logoImage} 
+                    />
                     <Text style={styles.text}>Perfil</Text>
                 </View>
             </View>
@@ -48,28 +102,41 @@ export default function Profile() {
                 <View>
                     <Image 
                         source={{
-                            uri: user?.photoURL 
-                                || "https://i.pinimg.com/1200x/c2/65/e5/c265e50d2d0ee2e666eabb6dc2ec8410.jpg"
+                            uri: userData?.avatarUrl || auth.currentUser?.photoURL || "https://cdn-icons-png.flaticon.com/512/149/149071.png"
                         }}
                         style={styles.avatar}
                     />
 
-                    <TouchableOpacity style={styles.editIcon}>
+                    <TouchableOpacity 
+                        style={styles.editIcon}
+                        onPress={() => router.push("/stacks/editProfile")}
+                    >
                         <PencilSimpleIcon size={16} color="white" weight="bold" />
                     </TouchableOpacity>
                 </View>
 
                 <Text style={styles.name}>
-                    {user?.displayName || "Seu nome"}
+                    {userData?.fullName || auth.currentUser?.displayName || "Usuário"}
                 </Text>
 
                 <Text style={styles.email}>
-                    {user?.email}
+                    {userData?.email || auth.currentUser?.email}
                 </Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.optionsContainer}>
                 
+                {/* --- NOVO BOTÃO: ANUNCIAR IMÓVEL --- */}
+                {/* Destaquei ele colocando como primeiro da lista */}
+                <ProfileOption
+                    icon={<HouseLineIcon size={20} color="#1ab65c" />} // Verde para chamar atenção
+                    label="Anunciar meu Imóvel"
+                    onPress={() => router.push("/stacks/addProperty")}
+                />
+                
+                {/* Linha divisória opcional para separar ações de proprietário das configurações */}
+                <View style={{ height: 1, backgroundColor: '#333', marginVertical: 10 }} />
+
                 <ProfileOption
                     icon={<PencilSimpleIcon size={20} color="#fff" />}
                     label="Edit Profile"
@@ -85,7 +152,7 @@ export default function Profile() {
                 <ProfileOption
                     icon={<BellIcon size={20} color="#fff" />}
                     label="Notifications"
-                    onPress={() => router.push("/stacks/notifications")}
+                    onPress={() => router.push("/stacks/configNotifications")}
                 />
 
                 <ProfileOption
@@ -110,6 +177,7 @@ export default function Profile() {
                 </TouchableOpacity>
             </ScrollView>
 
+            {/* MODAL DE LOGOUT */}
             <Modal
                 animationType="fade"
                 transparent
@@ -118,31 +186,22 @@ export default function Profile() {
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContainer}>
-                        
                         <Text style={styles.modalTitle}>Sair</Text>
+                        <Text style={styles.modalSubtitle}>Tem Certeza que Deseja Sair?</Text>
 
-                        <Text style={styles.modalSubtitle}>
-                            Tem Certeza que Deseja Sair?
-                        </Text>
-
-                        {/* CONFIRMAR */}
                         <TouchableOpacity
                             style={styles.confirmButton}
-                            onPress={async () => {
-                                router.replace("/stacks/login");
-                            }}
+                            onPress={handleLogout}
                         >
                             <Text style={styles.confirmButtonText}>Sim, Sair</Text>
                         </TouchableOpacity>
 
-                        {/* CANCELAR */}
                         <TouchableOpacity
                             style={styles.cancelButton}
                             onPress={() => setShowLogoutModal(false)}
                         >
                             <Text style={styles.cancelButtonText}>Cancelar</Text>
                         </TouchableOpacity>
-
                     </View>
                 </View>
             </Modal>
@@ -151,8 +210,7 @@ export default function Profile() {
     );
 }
 
-
-
+// Styles mantidos iguais
 export const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -216,8 +274,6 @@ export const styles = StyleSheet.create({
         fontSize: 16,
         marginLeft: 12,
     },
-
-    // MODAL
     modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0,0,0,0.6)",
@@ -269,4 +325,9 @@ export const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: "600",
     },
+    logoImage: {
+    width: 32,  
+    height: 32,
+    resizeMode: "contain", 
+  },
 });

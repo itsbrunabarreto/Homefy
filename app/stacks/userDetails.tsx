@@ -1,15 +1,21 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   View, 
   Text, 
   TextInput, 
   TouchableOpacity, 
   StyleSheet, 
-  Image 
+  Image,
+  Alert,
+  ActivityIndicator 
 } from "react-native";
 
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+
+
+import { auth, db } from "../../firebaseConfig";
+import { doc, setDoc } from "firebase/firestore";
 
 import {
   ArrowLeftIcon,
@@ -32,26 +38,88 @@ export default function UserDetails() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [gender, setGender] = useState("");
 
-  async function handleSelectImage() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 1,
-      aspect: [1, 1],
-      allowsEditing: true,
-    });
+  // Estado para controlar o carregamento
+  const [loading, setLoading] = useState(false);
 
-    if (!result.canceled) {
-      setProfileImage(result.assets[0].uri);
+  // Preencher email automaticamente se já estiver logado
+  useEffect(() => {
+    if (auth.currentUser?.email) {
+      setEmail(auth.currentUser.email);
+    }
+  }, []);
+
+  async function handleSelectImage() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        // IMPORTANTE: Qualidade baixa (0.2) para a string base64 não ficar gigante
+        quality: 0.2, 
+        // IMPORTANTE: Pedimos o base64 para salvar como texto
+        base64: true, 
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        // Montamos o prefixo necessário para o componente Image ler o texto como imagem
+        const imageUri = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        setProfileImage(imageUri);
+      }
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível selecionar a imagem.");
     }
   }
 
-  function handleContinue() {
+  async function handleContinue() {
+    // Validação básica
     if (!fullName || !nickname || !birthDate) {
-      alert("Preencha os campos obrigatórios.");
+      Alert.alert("Atenção", "Preencha os campos obrigatórios (Nome, Apelido, Data).");
       return;
     }
 
-    router.push("/tabs/home");
+    setLoading(true);
+
+    try {
+      const user = auth.currentUser;
+      
+      if (!user) {
+        Alert.alert("Erro", "Usuário não autenticado.");
+        return;
+      }
+
+      // Prepara o objeto para salvar no banco
+      const userData = {
+        uid: user.uid,
+        fullName,
+        nickname,
+        birthDate,
+        email,
+        phoneNumber,
+        gender,
+        // Aqui salvamos o TEXTO da imagem direto no banco. 
+        // Se o usuário não escolheu foto, enviamos null.
+        avatarUrl: profileImage || null, 
+        createdAt: new Date().toISOString(),
+      };
+
+      // Salva no Firestore na coleção "users" com o ID do usuário
+      await setDoc(doc(db, "users", user.uid), userData);
+
+      // Sucesso
+      router.push("/tabs/home");
+
+    } catch (error: any) {
+      console.error("Erro ao salvar perfil:", error);
+      
+      // Se o erro for sobre tamanho (quota/size), avisamos o usuário
+      if (error.message && error.message.includes("exceeds the maximum allowed size")) {
+        Alert.alert("Imagem muito grande", "A foto selecionada é muito pesada para este método. Tente uma foto mais simples.");
+      } else {
+        Alert.alert("Erro", "Não foi possível salvar os dados: " + error.message);
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -119,6 +187,7 @@ export default function UserDetails() {
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
+            editable={false} // Email vem do login, melhor não editar
           />
           <EnvelopeSimpleIcon size={24} color="#757575" />
         </View>
@@ -148,8 +217,16 @@ export default function UserDetails() {
 
       </View>
 
-      <TouchableOpacity style={styles.buttonContinue} onPress={handleContinue}>
-        <Text style={styles.buttonText}>Continue</Text>
+      <TouchableOpacity 
+        style={[styles.buttonContinue, loading && { opacity: 0.7 }]} 
+        onPress={handleContinue}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#FFF" />
+        ) : (
+          <Text style={styles.buttonText}>Continue</Text>
+        )}
       </TouchableOpacity>
     </View>
   );

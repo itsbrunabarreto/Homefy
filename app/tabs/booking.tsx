@@ -1,254 +1,340 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from "react-native";
+import React, { useState, useCallback } from "react";
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
+  TouchableOpacity, 
+  Image, 
+  ActivityIndicator
+} from "react-native";
+import { useRouter, useFocusEffect } from "expo-router";
+import { MagnifyingGlassIcon, ReceiptIcon, MapPinIcon } from "phosphor-react-native";
 
-export default function BookingScreen() {
-  const [selected, setSelected] = useState("canceled"); 
-  // opções: "ongoing", "completed", "canceled"
+// Firebase
+import { auth, db } from "../../firebaseConfig";
+import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 
-  const filteredBookings = BOOKINGS.filter(item => item.status === selected);
+
+export default function Booking() {
+  const router = useRouter();
+  
+  // Estado para guardar as reservas REAIS vindas do banco
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Estado para controlar a aba ativa
+  const [activeTab, setActiveTab] = useState<"Ongoing" | "Completed" | "Canceled">("Ongoing");
+
+  // FUNÇÃO: Busca as reservas do usuário no Firebase
+  const fetchBookings = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      // Busca na coleção 'bookings' onde o campo 'userId' é igual ao ID do usuário logado
+      const q = query(
+        collection(db, "bookings"), 
+        where("userId", "==", user.uid)
+        // orderBy("createdAt", "desc") // Pode precisar criar índice no Firebase
+      );
+
+      const querySnapshot = await getDocs(q);
+      const list: any[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+
+      setBookings(list);
+    } catch (error) {
+      console.error("Erro ao buscar reservas:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Recarrega a lista toda vez que a tela ganha foco
+  useFocusEffect(
+    useCallback(() => {
+      fetchBookings();
+    }, [])
+  );
+
+  // Filtra a lista REAL com base na aba selecionada
+  // Se não tiver status no banco, assume 'Ongoing' para não sumir
+  const filteredData = bookings.filter(item => (item.status || "Ongoing") === activeTab);
+
+  const renderItem = ({ item }) => {
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Image 
+            // Tenta usar a imagem salva, senão usa o placeholder
+            source={item.image ? { uri: item.image } : require("../assets/Room.jpg")} 
+            style={styles.cardImage} 
+          />
+          
+          <View style={styles.cardInfo}>
+            <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
+            <View style={styles.locationRow}>
+              <MapPinIcon size={14} color="#757575" />
+              <Text style={styles.cardLocation}>{item.location}</Text>
+            </View>
+            
+            <View style={[
+              styles.statusBadge, 
+              item.status === "Ongoing" ? styles.bgGreen : 
+              item.status === "Canceled" ? styles.bgRed : styles.bgGray
+            ]}>
+              <Text style={[
+                styles.statusText,
+                item.status === "Ongoing" ? { color: "#1ab65c" } : 
+                item.status === "Canceled" ? { color: "#ff4d4d" } : { color: "#fff" }
+              ]}>
+                {item.status === "Ongoing" ? "Confirmed" : item.status}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.actionRow}>
+          {item.status === "Ongoing" && (
+            <>
+              <TouchableOpacity style={styles.btnOutline}>
+                <Text style={styles.btnOutlineText}>Cancel Booking</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnFilled}>
+                <Text style={styles.btnFilledText}>View Ticket</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {item.status === "Completed" && (
+            <TouchableOpacity style={[styles.btnFilled, { flex: 1 }]}>
+               <Text style={styles.btnFilledText}>Book Again</Text>
+            </TouchableOpacity>
+          )}
+
+          {item.status === "Canceled" && (
+             <Text style={styles.refundText}>
+               Canceled on {item.date || "Unknown date"}
+             </Text>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
       
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerLogo}>⚡</Text>
-        <Text style={styles.headerTitle}>My Booking</Text>
-      </View>
-
-      {/* FILTER BUTTONS */}
-      <View style={styles.filterContainer}>
-        <TouchableOpacity
-          onPress={() => setSelected("ongoing")}
-          style={[styles.filterButton, selected === "ongoing" && styles.filterActive]}
-        >
-          <Text style={[styles.filterText, selected === "ongoing" && styles.filterTextActive]}>
-            Ongoing
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setSelected("completed")}
-          style={[styles.filterButton, selected === "completed" && styles.filterActive]}
-        >
-          <Text style={[styles.filterText, selected === "completed" && styles.filterTextActive]}>
-            Completed
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setSelected("canceled")}
-          style={[styles.filterButton, selected === "canceled" && styles.filterActive]}
-        >
-          <Text style={[styles.filterText, selected === "canceled" && styles.filterTextActive]}>
-            Canceled
-          </Text>
+        <View style={styles.headerLeft}>
+           <Image 
+              source={require("../assets/logo.png")} 
+              style={styles.logoImage} 
+            />
+           <Text style={styles.headerTitle}>My Booking</Text>
+        </View>
+        <TouchableOpacity>
+           <MagnifyingGlassIcon size={28} color="#f4f4f4" />
         </TouchableOpacity>
       </View>
 
-      {/* LISTA */}
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-
-        {filteredBookings.map((item, index) => (
-          <View key={index} style={styles.card}>
-            
-            <View style={styles.row}>
-              <Image source={{ uri: item.image }} style={styles.cardImage} />
-
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={styles.cardLocation}>{item.location}</Text>
-
-                {item.status === "canceled" && (
-                  <View style={styles.tagCanceled}>
-                    <Text style={styles.tagTextCanceled}>Canceled & Refunded</Text>
-                  </View>
-                )}
-
-                {item.status === "ongoing" && (
-                  <View style={styles.tagOngoing}>
-                    <Text style={styles.tagTextOngoing}>Ongoing</Text>
-                  </View>
-                )}
-
-                {item.status === "completed" && (
-                  <View style={styles.tagCompleted}>
-                    <Text style={styles.tagTextCompleted}>Completed</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {/* CAIXA DE AVISO APENAS PARA CANCELADOS */}
-            {item.status === "canceled" && (
-              <View style={styles.warningBox}>
-                <Text style={styles.warningText}>⚠ You canceled this hotel booking</Text>
-              </View>
-            )}
-
-          </View>
+      {/* TABS */}
+      <View style={styles.tabsContainer}>
+        {["Ongoing", "Completed", "Canceled"].map((tab) => (
+          <TouchableOpacity 
+            key={tab}
+            style={[
+              styles.tabButton, 
+              activeTab === tab && styles.tabButtonActive
+            ]}
+            onPress={() => setActiveTab(tab as any)}
+          >
+            <Text style={[
+              styles.tabText,
+              activeTab === tab && styles.tabTextActive
+            ]}>
+              {tab}
+            </Text>
+          </TouchableOpacity>
         ))}
+      </View>
 
-      </ScrollView>
+      {/* CONTEÚDO */}
+      {loading ? (
+        <ActivityIndicator size="large" color="#1ab65c" style={{ marginTop: 50 }} />
+      ) : (
+        <FlatList 
+          data={filteredData}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 100, gap: 20 }}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={() => (
+             <View style={{ alignItems: 'center', marginTop: 50 }}>
+               <ReceiptIcon size={64} color="#333" />
+               <Text style={{ color: '#757575', marginTop: 10 }}>
+                 No {activeTab.toLowerCase()} bookings found.
+               </Text>
+             </View>
+          )}
+        />
+      )}
+
     </View>
   );
 }
 
-// DADOS EXEMPLO
-const BOOKINGS = [
-  {
-    title: "Palms Casino Resort",
-    location: "London, United Kingdom",
-    image: "https://i.imgur.com/u5ZQhYI.jpeg",
-    status: "canceled",
-  },
-  {
-    title: "The Mark Hotel",
-    location: "Luxemburg, Germany",
-    image: "https://i.imgur.com/oC5Zb6h.jpeg",
-    status: "canceled",
-  },
-  {
-    title: "Palazzo Versace Dubai",
-    location: "Dubai, United Arab Emirates",
-    image: "https://i.imgur.com/Qf5o3z9.jpeg",
-    status: "completed",
-  },
-  {
-    title: "Central Park Hotel",
-    location: "New York, USA",
-    image: "https://i.imgur.com/Lb5Zb9n.jpeg",
-    status: "ongoing",
-  },
-];
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f4f5f7",
-    paddingTop: 60,
+    backgroundColor: "#181a20",
     paddingHorizontal: 20,
+    paddingTop: 50,
   },
-
-  // HEADER
   header: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 10,
+    marginBottom: 24,
   },
-  headerLogo: {
-    fontSize: 28,
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  logoImage: {
+    width: 32,
+    height: 32,
+    resizeMode: "contain",
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "bold",
-    color: "#000",
+    color: "#f4f4f4",
   },
-
-  // FILTERS
-  filterContainer: {
+  tabsContainer: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 25,
+    marginBottom: 24,
+    backgroundColor: "#1f222a",
+    borderRadius: 12,
+    padding: 4, 
+    gap: 8,
   },
-  filterButton: {
-    paddingHorizontal: 22,
-    paddingVertical: 8,
-    backgroundColor: "#fff",
-    borderRadius: 25,
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: "#dcdcdc",
+    borderColor: "transparent",
   },
-  filterActive: {
+  tabButtonActive: {
     backgroundColor: "#1ab65c",
-    borderColor: "#1ab65c",
   },
-  filterText: {
-    color: "#555",
+  tabText: {
+    color: "#757575",
     fontWeight: "600",
+    fontSize: 14,
   },
-  filterTextActive: {
-    color: "#fff",
+  tabTextActive: {
+    color: "#ffffff",
+    fontWeight: "bold",
   },
-
-  // CARD
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: "#1f222a",
     borderRadius: 16,
-    padding: 15,
-    marginTop: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
+    padding: 16,
   },
-  row: {
+  cardHeader: {
     flexDirection: "row",
-    gap: 15,
+    gap: 16,
+    marginBottom: 16,
   },
   cardImage: {
-    width: 80,
-    height: 80,
+    width: 100,
+    height: 100,
     borderRadius: 12,
+    backgroundColor: "#333",
+  },
+  cardInfo: {
+    flex: 1,
+    justifyContent: "space-between",
+    paddingVertical: 4,
   },
   cardTitle: {
-    fontSize: 17,
+    color: "#f4f4f4",
+    fontSize: 18,
     fontWeight: "bold",
-    color: "#111",
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   cardLocation: {
-    marginTop: 4,
-    color: "#666",
+    color: "#757575",
+    fontSize: 13,
   },
-
-  // TAGS
-  tagCanceled: {
-    backgroundColor: "#ffe4e6",
-    paddingVertical: 4,
+  statusBadge: {
+    alignSelf: "flex-start",
     paddingHorizontal: 10,
-    borderRadius: 8,
-    marginTop: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  tagTextCanceled: {
-    color: "#d72638",
+  bgGreen: { backgroundColor: "rgba(26, 182, 92, 0.1)" }, 
+  bgRed: { backgroundColor: "rgba(255, 77, 77, 0.1)" }, 
+  bgGray: { backgroundColor: "rgba(117, 117, 117, 0.1)" },
+  statusText: {
     fontSize: 12,
     fontWeight: "600",
   },
-
-  tagOngoing: {
-    backgroundColor: "#d1fae5",
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    marginTop: 8,
+  divider: {
+    height: 1,
+    backgroundColor: "#2a2d35",
+    marginBottom: 16,
   },
-  tagTextOngoing: {
-    color: "#047857",
-    fontSize: 12,
+  actionRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+  btnOutline: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#35383F",
+    alignItems: "center",
+  },
+  btnOutlineText: {
+    color: "#f4f4f4",
     fontWeight: "600",
   },
-
-  tagCompleted: {
-    backgroundColor: "#dbeafe",
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    marginTop: 8,
+  btnFilled: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: "#1ab65c",
+    alignItems: "center",
+    shadowColor: "#1ab65c",
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
   },
-  tagTextCompleted: {
-    color: "#1d4ed8",
-    fontSize: 12,
+  btnFilledText: {
+    color: "#fff",
     fontWeight: "600",
   },
-
-  // WARNING
-  warningBox: {
-    backgroundColor: "#ffe7ea",
-    padding: 10,
-    borderRadius: 10,
-    marginTop: 15,
-  },
-  warningText: {
-    color: "#d72638",
+  refundText: {
+    color: "#757575",
+    fontStyle: "italic",
+    fontSize: 12,
   },
 });
