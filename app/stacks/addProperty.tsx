@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import { 
   View, Text, TextInput, StyleSheet, ScrollView, 
-  TouchableOpacity, Image, Alert, ActivityIndicator 
+  TouchableOpacity, Image, Alert, ActivityIndicator, FlatList 
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { 
   ArrowLeft, Camera, House, CurrencyDollar, 
-  Bed, Bathtub, ArrowsOutSimple 
+  Bed, Bathtub, ArrowsOutSimple, XCircle 
 } from "phosphor-react-native";
 
 // Firebase
@@ -32,26 +32,39 @@ export default function AddProperty() {
   // Tipo: Venda ou Aluguel
   const [type, setType] = useState<"sale" | "rent">("sale");
   
-  // Imagem
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  // --- MUDANÇA AQUI: Array de imagens ---
+  const [images, setImages] = useState<string[]>([]);
 
   async function handleSelectImage() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3], // Formato retangular para casa fica melhor
-      quality: 0.2, // Baixa qualidade para caber no banco
-      base64: true,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true, // Se quiser permitir edição individual
+        aspect: [4, 3],
+        quality: 0.2, // Mantém baixo para não estourar o banco
+        base64: true,
+        // selectionLimit: 5, // (Opcional) Limita quantas de uma vez no Android 13+/iOS 14+
+        allowsMultipleSelection: false // O "allowsEditing" geralmente conflita com seleção múltipla, então vamos adicionar uma por uma
+      });
 
-    if (!result.canceled && result.assets[0].base64) {
-      setImageUri(`data:image/jpeg;base64,${result.assets[0].base64}`);
+      if (!result.canceled && result.assets[0].base64) {
+        const newImage = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        // Adiciona a nova imagem à lista existente
+        setImages((prevImages) => [...prevImages, newImage]);
+      }
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível selecionar a imagem.");
     }
   }
 
+  // Função para remover uma imagem da lista antes de enviar
+  function removeImage(indexToRemove: number) {
+    setImages((prevImages) => prevImages.filter((_, index) => index !== indexToRemove));
+  }
+
   async function handlePublish() {
-    if (!title || !price || !imageUri) {
-      Alert.alert("Atenção", "Preencha título, preço e escolha uma foto.");
+    if (!title || !price || images.length === 0) {
+      Alert.alert("Atenção", "Preencha título, preço e adicione pelo menos uma foto.");
       return;
     }
 
@@ -61,7 +74,6 @@ export default function AddProperty() {
       const user = auth.currentUser;
       if (!user) throw new Error("Usuário não logado");
 
-      // Salva na coleção "properties"
       await addDoc(collection(db, "properties"), {
         ownerId: user.uid,
         ownerName: user.displayName || "Anunciante",
@@ -69,11 +81,15 @@ export default function AddProperty() {
         description,
         location,
         price: parseFloat(price),
-        type, // 'sale' ou 'rent'
+        type, 
         bedrooms: parseInt(bedrooms) || 0,
         bathrooms: parseInt(bathrooms) || 0,
         area: parseInt(area) || 0,
-        image: imageUri, // Salva a foto direto no documento
+        
+        // --- MUDANÇA AQUI: Salvando a lista e definindo a primeira como capa ---
+        images: images, 
+        image: images[0], // Mantém esse campo para compatibilidade com o código antigo da Home/Search
+        
         createdAt: new Date().toISOString()
       });
 
@@ -82,7 +98,12 @@ export default function AddProperty() {
 
     } catch (error: any) {
       console.error(error);
-      Alert.alert("Erro", "Não foi possível anunciar: " + error.message);
+      
+      if (error.message && error.message.includes("size")) {
+        Alert.alert("Erro", "As imagens são muito grandes. Tente adicionar menos fotos.");
+      } else {
+        Alert.alert("Erro", "Não foi possível anunciar: " + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -100,19 +121,33 @@ export default function AddProperty() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         
-        {/* SELETOR DE FOTO */}
-        <TouchableOpacity style={styles.imagePicker} onPress={handleSelectImage}>
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.imagePreview} />
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <Camera size={32} color="#757575" />
-              <Text style={styles.imageText}>Adicionar Foto Principal</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        {/* --- ÁREA DE FOTOS (Carrossel Horizontal) --- */}
+        <Text style={styles.label}>Fotos do Imóvel ({images.length})</Text>
+        
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosContainer}>
+          {/* Botão de Adicionar (Sempre visível no começo) */}
+          <TouchableOpacity style={styles.addPhotoButton} onPress={handleSelectImage}>
+            <Camera size={32} color="#1ab65c" />
+            <Text style={styles.addPhotoText}>Adicionar</Text>
+          </TouchableOpacity>
 
-        {/* TIPO DE ANÚNCIO (TOGGLE) */}
+          {/* Lista das fotos selecionadas */}
+          {images.map((imgUri, index) => (
+            <View key={index} style={styles.photoWrapper}>
+              <Image source={{ uri: imgUri }} style={styles.thumbnail} />
+              
+              {/* Botão de Remover (X) */}
+              <TouchableOpacity 
+                style={styles.removeButton} 
+                onPress={() => removeImage(index)}
+              >
+                <XCircle size={20} color="#ff4d4d" weight="fill" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* TIPO DE ANÚNCIO */}
         <View style={styles.typeContainer}>
           <TouchableOpacity 
             style={[styles.typeButton, type === "sale" && styles.typeButtonActive]}
@@ -139,6 +174,20 @@ export default function AddProperty() {
               placeholderTextColor="#555"
               value={title}
               onChangeText={setTitle}
+            />
+          </View>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Descrição</Text>
+          <View style={[styles.inputContainer, { height: 100, alignItems: 'flex-start', paddingTop: 10 }]}>
+            <TextInput 
+              style={[styles.input, { textAlignVertical: 'top' }]} 
+              placeholder="Descreva o imóvel..." 
+              placeholderTextColor="#555"
+              value={description}
+              onChangeText={setDescription}
+              multiline
             />
           </View>
         </View>
@@ -259,30 +308,48 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
-  imagePicker: {
-    width: "100%",
-    height: 200,
-    backgroundColor: "#1f222a",
-    borderRadius: 16,
-    overflow: "hidden",
+  
+  // --- ESTILOS DAS FOTOS ---
+  photosContainer: {
+    flexDirection: 'row',
     marginBottom: 24,
+  },
+  addPhotoButton: {
+    width: 100,
+    height: 100,
+    backgroundColor: "#1f222a",
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#333",
-    borderStyle: "dashed"
+    borderStyle: "dashed",
+    marginRight: 10,
   },
-  imagePlaceholder: {
-    alignItems: "center",
-    gap: 10,
+  addPhotoText: {
+    color: "#1ab65c",
+    fontSize: 12,
+    marginTop: 5,
+    fontWeight: 'bold'
   },
-  imageText: {
-    color: "#757575",
+  photoWrapper: {
+    position: 'relative',
+    marginRight: 10,
   },
-  imagePreview: {
-    width: "100%",
-    height: "100%",
+  thumbnail: {
+    width: 100,
+    height: 100,
+    borderRadius: 12,
   },
+  removeButton: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+  },
+
+  // --- OUTROS ESTILOS (IGUAIS) ---
   typeContainer: {
     flexDirection: "row",
     backgroundColor: "#1f222a",

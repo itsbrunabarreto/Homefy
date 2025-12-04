@@ -11,36 +11,43 @@ import {
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 
-// Ícones com o sufixo "Icon" conforme solicitado
+// Ícones
 import { 
   ArrowLeftIcon, 
   StarIcon, 
   BookmarkIcon, 
   SquaresFourIcon, 
-  ListIcon 
+  ListIcon,
+  SmileySad // Caso não funcione, troque por StarIcon
 } from "phosphor-react-native";
 
 // Firebase
-import { db } from "../../firebaseConfig";
-import { collection, getDocs } from "firebase/firestore";
+import { auth, db } from "../../firebaseConfig";
+import { collection, getDocs, deleteDoc, doc, query, where } from "firebase/firestore";
 
 export default function Bookmarks() {
   const router = useRouter();
 
-  // Estados
   const [isGrid, setIsGrid] = useState(true);
   const [bookmarks, setBookmarks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // BUSCA DADOS REAIS NO FIREBASE
-  // (Por enquanto buscamos todos os imóveis para simular que foram salvos)
   const fetchBookmarks = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, "properties"));
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const q = query(
+        collection(db, "bookmarks"), 
+        where("userId", "==", user.uid)
+      );
+
+      const querySnapshot = await getDocs(q);
       const list: any[] = [];
       
       querySnapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() });
+        // O segredo está aqui: bookmarkId é o ID do documento que vamos apagar
+        list.push({ bookmarkId: doc.id, ...doc.data() });
       });
 
       setBookmarks(list);
@@ -57,42 +64,64 @@ export default function Bookmarks() {
     }, [])
   );
 
-  // Função para remover item da lista (Visualmente)
-  function handleRemoveBookmark(id: string) {
+  // --- FUNÇÃO DE REMOVER ---
+  async function handleRemoveBookmark(bookmarkId: string) {
+    console.log("Tentando remover ID:", bookmarkId); // Debug
+
+    if (!bookmarkId) {
+        Alert.alert("Erro", "ID do favorito inválido.");
+        return;
+    }
+
     Alert.alert(
-      "Remover Favorito",
-      "Deseja remover este imóvel dos seus salvos?",
+      "Remover",
+      "Deseja tirar este item dos favoritos?",
       [
-        { text: "Cancelar", style: "cancel" },
+        { text: "Não", style: "cancel" },
         { 
-          text: "Remover", 
+          text: "Sim, remover", 
           style: "destructive", 
-          onPress: () => {
-            setBookmarks(prev => prev.filter(item => item.id !== id));
+          onPress: async () => {
+            try {
+              console.log("Deletando do banco...");
+              // 1. Remove do Banco
+              await deleteDoc(doc(db, "bookmarks", bookmarkId));
+              console.log("Deletado com sucesso!");
+
+              // 2. Remove da Tela
+              setBookmarks(prev => prev.filter(item => item.bookmarkId !== bookmarkId));
+            } catch (error) {
+              console.error("Erro ao deletar:", error);
+              Alert.alert("Erro", "Não foi possível remover.");
+            }
           }
         }
       ]
     );
   }
 
+  const handleDetails = (item: any) => {
+      router.push({
+        pathname: "/stacks/details",
+        params: { data: JSON.stringify(item) } 
+      });
+  }
+
   const renderBookmarkItem = ({ item }) => {
-    // Define estilos dinamicamente
     const containerStyle = isGrid ? styles.cardGrid : styles.cardList;
     const imageStyle = isGrid ? styles.cardImageGrid : styles.cardImageList;
 
     return (
       <TouchableOpacity 
         style={containerStyle} 
-        onPress={() => router.push("/stacks/details")}
+        onPress={() => handleDetails(item)}
         activeOpacity={0.7}
       >
         <Image 
-          // Lógica para usar Imagem do Banco (Base64) ou Placeholder
           source={item.image ? { uri: item.image } : require("../assets/Room.jpg")} 
           style={imageStyle} 
         />
         
-        {/* Conteúdo de Texto */}
         <View style={styles.cardContent}>
           <Text style={styles.cardTitle} numberOfLines={isGrid ? 2 : 1}>
             {item.title}
@@ -100,11 +129,11 @@ export default function Bookmarks() {
           
           <View style={styles.ratingRow}>
             <StarIcon size={14} color="#ffd700" weight="fill" />
-            {/* Exibe localização real do banco */}
-            <Text style={styles.ratingText}>4.8 - {item.location}</Text>
+            <Text style={styles.ratingText}>
+                {item.rating || 4.8} - {item.location}
+            </Text>
           </View>
 
-          {/* Preço e Botão de Remover */}
           <View style={styles.priceRow}>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
               <Text style={styles.priceText}>
@@ -113,8 +142,16 @@ export default function Bookmarks() {
               <Text style={styles.priceUnit}> / noite</Text>
             </View>
             
-            {/* Ícone de Bookmark (Botão de Remover) */}
-            <TouchableOpacity onPress={() => handleRemoveBookmark(item.id)}>
+            {/* BOTÃO DE REMOVER CORRIGIDO */}
+            {/* Adicionamos zIndex e hitSlop para garantir o clique */}
+            <TouchableOpacity 
+                style={styles.removeButton}
+                onPress={(e) => {
+                    e.stopPropagation(); // Impede que o clique abra os detalhes
+                    handleRemoveBookmark(item.bookmarkId);
+                }}
+                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+            >
                <BookmarkIcon size={24} color="#1ab65c" weight="fill" />
             </TouchableOpacity>
           </View>
@@ -125,31 +162,27 @@ export default function Bookmarks() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <ArrowLeftIcon size={28} color="#f4f4f4" />
         </TouchableOpacity>
         
-        <Text style={styles.headerTitle}>My Bookmark</Text>
+        <Text style={styles.headerTitle}>Meus Favoritos</Text>
         
-        {/* Ícones de Troca de Visualização (Funcionais) */}
         <View style={{ flexDirection: 'row', gap: 16 }}>
            <TouchableOpacity onPress={() => setIsGrid(false)}>
              <ListIcon 
                size={24} 
-               // Se NÃO for grid, fica verde
                color={!isGrid ? "#1ab65c" : "#f4f4f4"} 
-               weight="fill" 
+               weight={!isGrid ? "bold" : "regular"} 
              />
            </TouchableOpacity>
 
            <TouchableOpacity onPress={() => setIsGrid(true)}>
              <SquaresFourIcon 
                size={24} 
-               // Se FOR grid, fica verde
                color={isGrid ? "#1ab65c" : "#f4f4f4"} 
-               weight="fill"
+               weight={isGrid ? "fill" : "regular"}
              />
            </TouchableOpacity>
         </View>
@@ -159,25 +192,23 @@ export default function Bookmarks() {
         <ActivityIndicator size="large" color="#1ab65c" style={{ marginTop: 50 }} />
       ) : (
         <FlatList 
-          // A 'key' muda para forçar o React a redesenhar a lista quando muda o layout
           key={isGrid ? 'grid' : 'list'} 
           data={bookmarks}
-          keyExtractor={item => item.id}
+          keyExtractor={item => item.bookmarkId} 
           renderItem={renderBookmarkItem}
           
-          // Colunas dinâmicas
           numColumns={isGrid ? 2 : 1}
-          
-          // Ajuste de espaçamento
           columnWrapperStyle={isGrid ? { justifyContent: 'space-between' } : undefined}
-          
           contentContainerStyle={{ paddingBottom: 20, gap: 16 }}
           showsVerticalScrollIndicator={false}
           
           ListEmptyComponent={() => (
-              <Text style={{ color: '#757575', textAlign: 'center', marginTop: 50 }}>
-                  Nenhum favorito salvo.
-              </Text>
+              <View style={{ alignItems: 'center', marginTop: 80 }}>
+                  <SmileySad size={64} color="#333" />
+                  <Text style={{ color: '#757575', textAlign: 'center', marginTop: 10, fontSize: 16 }}>
+                      Nenhum imóvel salvo ainda.
+                  </Text>
+              </View>
           )}
         />
       )}
@@ -203,8 +234,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#f4f4f4",
   },
-  
-  // --- CARD: MODO GRADE (GRID) ---
   cardGrid: {
     backgroundColor: "#1f222a",
     width: "48%", 
@@ -218,14 +247,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 10,
   },
-
-  // --- CARD: MODO LISTA (LIST) ---
   cardList: {
     backgroundColor: "#1f222a",
     width: "100%", 
     borderRadius: 16,
     padding: 12,
-    flexDirection: "row", // Imagem ao lado
+    flexDirection: "row", 
     gap: 14,
     alignItems: "center",
   },
@@ -234,8 +261,6 @@ const styles = StyleSheet.create({
     height: 90,
     borderRadius: 12,
   },
-
-  // --- CONTEÚDO ---
   cardContent: {
     flex: 1,
     justifyContent: 'space-between',
@@ -264,7 +289,7 @@ const styles = StyleSheet.create({
   },
   priceText: {
     color: "#1ab65c",
-    fontSize: 16, // Reduzi levemente para caber melhor
+    fontSize: 16, 
     fontWeight: "bold",
   },
   priceUnit: {
@@ -272,4 +297,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 3,
   },
+  removeButton: {
+    zIndex: 10, // Garante que fique acima do card
+    padding: 5, // Área extra visual
+  }
 });

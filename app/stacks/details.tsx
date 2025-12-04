@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   ArrowLeft, 
   BookmarkSimple, 
@@ -20,88 +20,146 @@ import {
   Image, 
   ScrollView, 
   TouchableOpacity, 
-  Alert 
+  ActivityIndicator,
+  Dimensions
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
+
+const { width } = Dimensions.get("window");
 
 export default function Details() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  
+  // Estados
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [activeImage, setActiveImage] = useState<string | null>(null);
 
-  // Função para simular reserva
+  // 1. RECUPERA OS DADOS
+  // O params.data vem como string JSON da tela Home, precisamos converter de volta para Objeto
+  const property = params.data ? JSON.parse(params.data as string) : null;
+
+  // Lógica para galeria (array ou string única)
+  const galleryImages = property?.images || (property?.image ? [property.image] : []);
+
+  // 2. EFEITO INICIAL (Apenas define a imagem principal)
+  useEffect(() => {
+    if (galleryImages.length > 0) {
+      setActiveImage(galleryImages[0]);
+    }
+  }, []);
+
+  // Se não houver dados, mostra carregando
+  if (!property) {
+    return (
+        <View style={[styles.container, {justifyContent: 'center', alignItems: 'center'}]}>
+            <ActivityIndicator color="#1ab65c" size="large"/>
+        </View>
+    );
+  }
+
+  // Função de Reserva
   const handleBooking = () => {
-    Alert.alert("Reserva", "Deseja reservar este hotel?", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Confirmar", onPress: () => router.push("/stacks/payment") } // Supondo que haverá uma tela de pagamento
-    ]);
+    router.push({
+        pathname: "/stacks/selectDate",
+        params: { property: JSON.stringify(property) }
+    });
   };
 
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         
-        {/* HEADER COM IMAGEM DE FUNDO */}
+        {/* HEADER COM IMAGEM DESTAQUE */}
         <View style={styles.header}>
-          <Image style={styles.headerImage} source={require("../assets/Room.jpg")} />
+          <Image 
+            style={styles.headerImage} 
+            source={activeImage ? { uri: activeImage } : require("../assets/Room.jpg")} 
+          />
           
+          <View style={styles.overlay} />
+
           <View style={styles.headerInfoButtons}>
-            <TouchableOpacity onPress={() => router.back()}>
-               <ArrowLeft size={32} color= "#f4f4f4" />
+            <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+               <ArrowLeft size={28} color= "#f4f4f4" />
             </TouchableOpacity>
 
             <View style={styles.headerInfoButtonsRight}>
-              <TouchableOpacity onPress={() => setIsBookmarked(!isBookmarked)}>
+              <TouchableOpacity onPress={() => setIsBookmarked(!isBookmarked)} style={styles.iconBtn}>
                  <BookmarkSimple 
-                   size={32} 
+                   size={28} 
                    color= "#f4f4f4" 
                    weight={isBookmarked ? "fill" : "regular"} 
                  />
               </TouchableOpacity>
-              <TouchableOpacity>
-                 <DotsThreeCircle size={32} color= "#f4f4f4" />
+              <TouchableOpacity style={styles.iconBtn}>
+                 <DotsThreeCircle size={28} color= "#f4f4f4" />
               </TouchableOpacity>
             </View>
           </View>
         </View>
         
         {/* TÍTULO E ENDEREÇO */}
-        <Text style={styles.infoNameText}>Royale President Hotel</Text>
+        <Text style={styles.infoNameText}>{property.title}</Text>
 
         <View style={styles.contentAddress}>
           <MapPin size={24} color="#1ab65c" weight="fill" />
-          <Text style={styles.contentAddressText}>79 Place de la Madeleine, Paris, 75009, France</Text>
+          <Text style={styles.contentAddressText}>{property.location}</Text>
         </View>
 
         <View style={styles.separator} />
 
-        {/* GALERIA DE FOTOS */}
+        {/* GALERIA DE FOTOS INTERATIVA */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Gallery Photos</Text>
           <Text style={styles.sectionLink}>See All</Text>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.contentPhotoContainer}>
-          <Image style={styles.contentPhotoImage} source={require("../assets/Room.jpg")} />
-          <Image style={styles.contentPhotoImage} source={require("../assets/Room.jpg")} />
-          <Image style={styles.contentPhotoImage} source={require("../assets/Room.jpg")} />
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          style={styles.contentPhotoContainer}
+        >
+          {galleryImages.length > 0 ? (
+            galleryImages.map((imgUrl: string, index: number) => (
+              <TouchableOpacity 
+                key={index} 
+                onPress={() => setActiveImage(imgUrl)} // Troca a imagem do topo
+                activeOpacity={0.7}
+              >
+                <Image 
+                  style={[
+                    styles.contentPhotoImage, 
+                    activeImage === imgUrl && { borderWidth: 2, borderColor: '#1ab65c' }
+                  ]} 
+                  source={{ uri: imgUrl }} 
+                />
+              </TouchableOpacity>
+            ))
+          ) : (
+            // Fallback se não tiver imagens
+            [1, 2, 3].map((_, i) => (
+               <Image key={i} style={styles.contentPhotoImage} source={require("../assets/Room.jpg")} />
+            ))
+          )}
         </ScrollView>
 
-        {/* DETAILS (Quartos, Banheiros, etc) */}
+        {/* DETAILS */}
         <View style={styles.sectionHeader}>
            <Text style={styles.sectionTitle}>Details</Text>
         </View>
         <View style={styles.detailsRow}>
            <View style={styles.detailItem}>
               <Bed size={24} color="#1ab65c" />
-              <Text style={styles.detailText}>4 Beds</Text>
+              <Text style={styles.detailText}>{property.bedrooms || 0} Beds</Text>
            </View>
            <View style={styles.detailItem}>
               <Bathtub size={24} color="#1ab65c" />
-              <Text style={styles.detailText}>2 Baths</Text>
+              <Text style={styles.detailText}>{property.bathrooms || 0} Baths</Text>
            </View>
            <View style={styles.detailItem}>
               <ArrowsOutSimple size={24} color="#1ab65c" />
-              <Text style={styles.detailText}>4000 sqft</Text>
+              <Text style={styles.detailText}>{property.area || 0} m²</Text>
            </View>
         </View>
 
@@ -109,42 +167,30 @@ export default function Details() {
         <View style={styles.sectionHeader}>
            <Text style={styles.sectionTitle}>Description</Text>
         </View>
-        <Text style={styles.descriptionText} numberOfLines={3}>
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.
+        <Text style={styles.descriptionText} numberOfLines={4}>
+          {property.description || "No description provided."}
         </Text>
 
-        {/* FACILITIES (Grid de ícones) */}
+        {/* FACILITIES */}
         <View style={styles.sectionHeader}>
            <Text style={styles.sectionTitle}>Facilities</Text>
         </View>
         <View style={styles.facilitiesGrid}>
-           <View style={styles.facilityItem}>
-              <SwimmingPool size={24} color="#1ab65c" />
-              <Text style={styles.facilityText}>Pool</Text>
-           </View>
-           <View style={styles.facilityItem}>
-              <WifiHigh size={24} color="#1ab65c" />
-              <Text style={styles.facilityText}>WiFi</Text>
-           </View>
-           <View style={styles.facilityItem}>
-              <ForkKnife size={24} color="#1ab65c" />
-              <Text style={styles.facilityText}>Restaurant</Text>
-           </View>
-           <View style={styles.facilityItem}>
-              <Car size={24} color="#1ab65c" />
-              <Text style={styles.facilityText}>Parking</Text>
-           </View>
+           <View style={styles.facilityItem}><SwimmingPool size={24} color="#1ab65c" /><Text style={styles.facilityText}>Pool</Text></View>
+           <View style={styles.facilityItem}><WifiHigh size={24} color="#1ab65c" /><Text style={styles.facilityText}>WiFi</Text></View>
+           <View style={styles.facilityItem}><ForkKnife size={24} color="#1ab65c" /><Text style={styles.facilityText}>Dining</Text></View>
+           <View style={styles.facilityItem}><Car size={24} color="#1ab65c" /><Text style={styles.facilityText}>Parking</Text></View>
         </View>
 
-        {/* LOCATION (Mapa fake) */}
+        {/* LOCATION MAP (Visual Placeholder) */}
         <View style={styles.sectionHeader}>
            <Text style={styles.sectionTitle}>Location</Text>
         </View>
+        
         <View style={styles.mapContainer}>
-           {/* Aqui você colocaria um componente de mapa real (react-native-maps) */}
-           {/* Por enquanto, simulamos com uma View cinza e um pino */}
            <MapPin size={40} color="#1ab65c" weight="fill" />
-           <Text style={{color: '#555', marginTop: 5}}>Map View</Text>
+           <Text style={{color: '#757575', marginTop: 10, fontWeight: 'bold'}}>View on Map</Text>
+           <Text style={{color: '#555', fontSize: 12}}>{property.location}</Text>
         </View>
 
         {/* REVIEW */}
@@ -152,13 +198,12 @@ export default function Details() {
            <View style={{flexDirection: 'row', alignItems: 'center', gap: 5}}>
              <Text style={styles.sectionTitle}>Review</Text>
              <Star size={18} color="#ffd700" weight="fill" />
-             <Text style={{color: '#1ab65c', fontWeight: 'bold'}}>4.8</Text>
-             <Text style={{color: '#757575'}}>(4.981 reviews)</Text>
+             <Text style={{color: '#1ab65c', fontWeight: 'bold'}}>{property.rating || 4.8}</Text>
+             <Text style={{color: '#757575'}}>({property.reviews || 10} reviews)</Text>
            </View>
            <Text style={styles.sectionLink}>See All</Text>
         </View>
         
-        {/* Review Card Simples */}
         <View style={styles.reviewCard}>
            <View style={{flexDirection: 'row', gap: 10, alignItems: 'center'}}>
               <View style={styles.avatarPlaceholder} /> 
@@ -173,17 +218,21 @@ export default function Details() {
               </View>
            </View>
            <Text style={styles.reviewText}>
-             Very nice and comfortable hotel, thank you for accompanying my vacation!
+             Very nice and comfortable place!
            </Text>
         </View>
 
       </ScrollView>
 
-      {/* FOOTER FIXO (Preço e Botão) */}
+      {/* FOOTER FIXO */}
       <View style={styles.footer}>
         <View style={styles.footerContainerText}>
-          <Text style={styles.footerContainerTextMoney}>$29</Text>
-          <Text style={styles.footerContainerTextMonth}>/ night</Text>
+          <Text style={styles.footerContainerTextMoney}>
+            R$ {property.price ? property.price.toLocaleString('pt-BR') : '0'}
+          </Text>
+          <Text style={styles.footerContainerTextMonth}>
+             {property.type === 'rent' ? '/ noite' : ' (venda)'}
+          </Text>
         </View>
 
         <TouchableOpacity style={styles.button} onPress={handleBooking}>
@@ -201,12 +250,16 @@ const styles = StyleSheet.create({
   },
   header: {
     width: "100%",
-    height: 300, // Altura fixa para a imagem
+    height: 300,
   },
   headerImage: {
     width: "100%",
     height: "100%",
     position: "absolute",
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.2)',
   },
   headerInfoButtons: {
     marginTop: 50,
@@ -217,6 +270,14 @@ const styles = StyleSheet.create({
   headerInfoButtonsRight: {
     flexDirection: "row",
     gap: 15,
+  },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   infoNameText:{
     color: "#f4f4f4",
@@ -235,7 +296,7 @@ const styles = StyleSheet.create({
   contentAddressText: {
     color: "#f4f4f4",
     fontSize: 13,
-    flex: 1, // Para quebrar linha se for longo
+    flex: 1, 
   },
   separator:{
     height: 1,
@@ -243,8 +304,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 20,
   },
-  
-  // Section Headers (Reutilizável)
   sectionHeader: {
     flexDirection: "row",
     paddingHorizontal: 20,
@@ -262,8 +321,6 @@ const styles = StyleSheet.create({
     color: "#1ab65c",
     fontWeight: "600",
   },
-
-  // Photos
   contentPhotoContainer: {
     paddingLeft: 20,
     marginTop: 15,
@@ -273,12 +330,11 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 12,
     marginRight: 10,
+    backgroundColor: '#333',
   },
-
-  // Details Row
   detailsRow: {
     flexDirection: "row",
-    justifyContent: "space-between", // Espalha os itens
+    justifyContent: "space-between", 
     paddingHorizontal: 20,
     marginTop: 15,
   },
@@ -291,16 +347,12 @@ const styles = StyleSheet.create({
     color: "#757575",
     fontWeight: "600",
   },
-
-  // Description
   descriptionText: {
     color: "#757575",
     paddingHorizontal: 20,
     marginTop: 10,
     lineHeight: 20,
   },
-
-  // Facilities Grid
   facilitiesGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -310,17 +362,15 @@ const styles = StyleSheet.create({
   },
   facilityItem: {
     alignItems: "center",
-    width: "20%", // Aproximadamente 4 itens por linha
+    width: "20%", 
     gap: 5,
   },
   facilityText: {
     color: "#757575",
     fontSize: 12,
   },
-
-  // Map
   mapContainer: {
-    height: 150,
+    height: 180,
     backgroundColor: "#2a2d35",
     borderRadius: 16,
     marginHorizontal: 20,
@@ -328,8 +378,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
-  // Review Card
   reviewCard: {
     backgroundColor: "#1f222a",
     borderRadius: 16,
@@ -358,14 +406,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontSize: 13,
   },
-
-  // Footer Fixo
   footer: {
     position: "absolute",
     bottom: 0,
     width: "100%",
     height: 90,
-    backgroundColor: "#181a20", // Fundo igual da tela
+    backgroundColor: "#181a20",
     borderTopWidth: 1,
     borderTopColor: "#333",
     borderTopLeftRadius: 24,

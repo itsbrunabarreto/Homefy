@@ -9,34 +9,28 @@ import {
   ActivityIndicator
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
-import { MagnifyingGlassIcon, ReceiptIcon, MapPinIcon } from "phosphor-react-native";
+
+import { MagnifyingGlass, Receipt, MapPin } from "phosphor-react-native";
 
 // Firebase
 import { auth, db } from "../../firebaseConfig";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
-
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 export default function Booking() {
   const router = useRouter();
   
-  // Estado para guardar as reservas REAIS vindas do banco
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Estado para controlar a aba ativa
   const [activeTab, setActiveTab] = useState<"Ongoing" | "Completed" | "Canceled">("Ongoing");
 
-  // FUNÇÃO: Busca as reservas do usuário no Firebase
   const fetchBookings = async () => {
     try {
       const user = auth.currentUser;
       if (!user) return;
 
-      // Busca na coleção 'bookings' onde o campo 'userId' é igual ao ID do usuário logado
       const q = query(
         collection(db, "bookings"), 
         where("userId", "==", user.uid)
-        // orderBy("createdAt", "desc") // Pode precisar criar índice no Firebase
       );
 
       const querySnapshot = await getDocs(q);
@@ -46,6 +40,9 @@ export default function Booking() {
         list.push({ id: doc.id, ...doc.data() });
       });
 
+      // Ordenação manual por data
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
       setBookings(list);
     } catch (error) {
       console.error("Erro ao buscar reservas:", error);
@@ -54,23 +51,20 @@ export default function Booking() {
     }
   };
 
-  // Recarrega a lista toda vez que a tela ganha foco
   useFocusEffect(
     useCallback(() => {
       fetchBookings();
     }, [])
   );
 
-  // Filtra a lista REAL com base na aba selecionada
-  // Se não tiver status no banco, assume 'Ongoing' para não sumir
   const filteredData = bookings.filter(item => (item.status || "Ongoing") === activeTab);
 
-  const renderItem = ({ item }) => {
+  const renderItem = ({ item }: { item: any }) => {
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <Image 
-            // Tenta usar a imagem salva, senão usa o placeholder
+            // Fallback de imagem
             source={item.image ? { uri: item.image } : require("../assets/Room.jpg")} 
             style={styles.cardImage} 
           />
@@ -78,7 +72,7 @@ export default function Booking() {
           <View style={styles.cardInfo}>
             <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
             <View style={styles.locationRow}>
-              <MapPinIcon size={14} color="#757575" />
+              <MapPin size={14} color="#757575" />
               <Text style={styles.cardLocation}>{item.location}</Text>
             </View>
             
@@ -103,24 +97,49 @@ export default function Booking() {
         <View style={styles.actionRow}>
           {item.status === "Ongoing" && (
             <>
-              <TouchableOpacity style={styles.btnOutline}>
+              <TouchableOpacity 
+                style={styles.btnOutline}
+                onPress={() => router.push({
+                    pathname: "/stacks/cancelBooking",
+                    params: { data: JSON.stringify(item) }
+                })}
+              >
                 <Text style={styles.btnOutlineText}>Cancel Booking</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.btnFilled}>
+              
+              <TouchableOpacity 
+                style={styles.btnFilled}
+                onPress={() => router.push({
+                    pathname: "/stacks/ticket",
+                    params: { data: JSON.stringify(item) }
+                })}
+              >
                 <Text style={styles.btnFilledText}>View Ticket</Text>
               </TouchableOpacity>
             </>
           )}
 
           {item.status === "Completed" && (
-            <TouchableOpacity style={[styles.btnFilled, { flex: 1 }]}>
+            <TouchableOpacity 
+                style={[styles.btnFilled, { flex: 1 }]}
+                onPress={() => router.push({
+                    pathname: "/stacks/details",
+                    params: { data: JSON.stringify({
+                        id: item.propertyId, 
+                        title: item.title,
+                        location: item.location,
+                        price: item.price,
+                        image: item.image
+                    }) }
+                })}
+            >
                <Text style={styles.btnFilledText}>Book Again</Text>
             </TouchableOpacity>
           )}
 
           {item.status === "Canceled" && (
              <Text style={styles.refundText}>
-               Canceled on {item.date || "Unknown date"}
+               Canceled on {item.canceledAt ? new Date(item.canceledAt).toLocaleDateString() : "Unknown date"}
              </Text>
           )}
         </View>
@@ -134,14 +153,11 @@ export default function Booking() {
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-           <Image 
-              source={require("../assets/logo.png")} 
-              style={styles.logoImage} 
-            />
+           <Image source={require("../assets/logo.png")} style={styles.logoImage} />
            <Text style={styles.headerTitle}>My Booking</Text>
         </View>
         <TouchableOpacity>
-           <MagnifyingGlassIcon size={28} color="#f4f4f4" />
+           <MagnifyingGlass size={28} color="#f4f4f4" />
         </TouchableOpacity>
       </View>
 
@@ -178,7 +194,7 @@ export default function Booking() {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={() => (
              <View style={{ alignItems: 'center', marginTop: 50 }}>
-               <ReceiptIcon size={64} color="#333" />
+               <Receipt size={64} color="#333" />
                <Text style={{ color: '#757575', marginTop: 10 }}>
                  No {activeTab.toLowerCase()} bookings found.
                </Text>

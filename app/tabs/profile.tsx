@@ -7,7 +7,8 @@ import {
     ScrollView, 
     StyleSheet, 
     Modal,
-    ActivityIndicator 
+    ActivityIndicator,
+    Alert
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 
@@ -20,13 +21,16 @@ import {
     PencilSimpleIcon, 
     ShieldCheckIcon, 
     SignOutIcon,
-    HouseLineIcon, // <--- NOVO ÍCONE PARA O ANÚNCIO
+    HouseLine
 } from "phosphor-react-native";
 
 // Firebase
 import { auth, db } from "../../firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { signOut } from "firebase/auth";
+
+
+import { seedHotels } from "../utils/seedHotels"; 
 
 import ProfileOption from "../components/ProfileOption";
 
@@ -37,8 +41,12 @@ export default function Profile() {
     const [userData, setUserData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [seeding, setSeeding] = useState(false);
 
-    // Carrega dados toda vez que a tela ganha foco
+    // --- CONFIGURAÇÃO DE ADMIN ---
+    const ADMIN_EMAIL = "admin@gmail.com"; 
+    const currentUserEmail = auth.currentUser?.email;
+
     useFocusEffect(
         useCallback(() => {
             const fetchUserData = async () => {
@@ -75,6 +83,19 @@ export default function Profile() {
         }
     };
 
+    // Função Exclusiva do Admin
+    const handleAddAdminData = async () => {
+        setSeeding(true);
+        const success = await seedHotels(); // Chama a função do arquivo utils/seedHotels.ts
+        setSeeding(false);
+        
+        if (success) {
+            Alert.alert("Sucesso", "Hotéis foram adicionados ao banco!");
+        } else {
+            Alert.alert("Erro", "Falha ao adicionar dados.");
+        }
+    };
+
     if (loading) {
         return (
             <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -89,10 +110,7 @@ export default function Profile() {
             {/* HEADER */}
             <View style={styles.header}>
                 <View style={styles.headerTitle}>
-                    <Image 
-                        source={require("../assets/logo.png")} 
-                        style={styles.logoImage} 
-                    />
+                    <HouseIcon size={30} color="#1ab65c" weight="duotone" />
                     <Text style={styles.text}>Perfil</Text>
                 </View>
             </View>
@@ -126,15 +144,13 @@ export default function Profile() {
 
             <ScrollView contentContainerStyle={styles.optionsContainer}>
                 
-                {/* --- NOVO BOTÃO: ANUNCIAR IMÓVEL --- */}
-                {/* Destaquei ele colocando como primeiro da lista */}
+                {/* BOTÃO PARA ANUNCIAR (Disponível para todos) */}
                 <ProfileOption
-                    icon={<HouseLineIcon size={20} color="#1ab65c" />} // Verde para chamar atenção
+                    icon={<HouseLine size={20} color="#1ab65c" />}
                     label="Anunciar meu Imóvel"
                     onPress={() => router.push("/stacks/addProperty")}
                 />
                 
-                {/* Linha divisória opcional para separar ações de proprietário das configurações */}
                 <View style={{ height: 1, backgroundColor: '#333', marginVertical: 10 }} />
 
                 <ProfileOption
@@ -146,7 +162,7 @@ export default function Profile() {
                 <ProfileOption
                     icon={<CreditCardIcon size={20} color="#fff" />}
                     label="Payment"
-                    onPress={() => {}}
+                    onPress={() => router.push("/stacks/payment")}
                 />
 
                 <ProfileOption
@@ -166,6 +182,24 @@ export default function Profile() {
                     label="Help"
                     onPress={() => {}}
                 />
+
+                {/* --- ÁREA SECRETA DO ADMIN --- */}
+                {/* Só aparece se o email for admin@gmail.com */}
+                {currentUserEmail === ADMIN_EMAIL && (
+                    <TouchableOpacity 
+                        style={[styles.adminButton, seeding && { opacity: 0.7 }]} 
+                        onPress={handleAddAdminData}
+                        disabled={seeding}
+                    >
+                        {seeding ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                            <Text style={styles.adminButtonText}>
+                                ⚠️ ADMIN: Gerar Hotéis Demo
+                            </Text>
+                        )}
+                    </TouchableOpacity>
+                )}
 
                 {/* BOTÃO DE LOGOUT */}
                 <TouchableOpacity 
@@ -210,7 +244,6 @@ export default function Profile() {
     );
 }
 
-// Styles mantidos iguais
 export const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -274,6 +307,20 @@ export const styles = StyleSheet.create({
         fontSize: 16,
         marginLeft: 12,
     },
+    // Estilo novo do Botão Admin
+    adminButton: {
+        backgroundColor: "#FFA500", // Laranja para destacar
+        padding: 12,
+        borderRadius: 12,
+        alignItems: "center",
+        marginTop: 20,
+        marginBottom: 10,
+    },
+    adminButtonText: {
+        color: "#fff",
+        fontWeight: "bold",
+        fontSize: 14,
+    },
     modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0,0,0,0.6)",
@@ -325,9 +372,4 @@ export const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: "600",
     },
-    logoImage: {
-    width: 32,  
-    height: 32,
-    resizeMode: "contain", 
-  },
 });

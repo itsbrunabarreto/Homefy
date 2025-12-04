@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   View, 
   Text, 
@@ -9,7 +9,8 @@ import {
   FlatList, 
   Image,
   Pressable,
-  Keyboard
+  Keyboard,
+  ActivityIndicator
 } from "react-native";
 import { useRouter } from "expo-router";
 import { 
@@ -18,80 +19,112 @@ import {
   Star, 
   BookmarkSimple, 
   Clock,
-  X
+  X,
+  MapPin
 } from "phosphor-react-native";
 
-// DADOS DOS HOTÉIS (Fixo por enquanto, mas poderia vir do Firebase)
-const hotelsData = [
-  { id: '1', name: 'Hotel Nova Vista', location: 'Santo André, SP', price: '450,00', rating: 4.8, image: require("../assets/Room.jpg") },
-  { id: '2', name: 'Grand Palace', location: 'São Paulo, SP', price: '850,00', rating: 4.9, image: require("../assets/Room.jpg") },
-  { id: '3', name: 'Pousada Recanto', location: 'Campos do Jordão, SP', price: '320,00', rating: 4.5, image: require("../assets/Room.jpg") },
-  { id: '4', name: 'Resort Blue', location: 'Rio de Janeiro, RJ', price: '1200,00', rating: 4.7, image: require("../assets/Room.jpg") },
-];
+// Firebase Imports
+import { db } from "../../firebaseConfig";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
 
 const categories = ["All Hotel", "Recommended", "Popular", "Trending", "Low Price"];
 
 export default function Search() {
   const router = useRouter();
   
+  // Estados
   const [searchText, setSearchText] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Hotel");
-  
-  // Estado para guardar o histórico (enquanto o app estiver aberto)
   const [history, setHistory] = useState<string[]>(["Hotel Fazenda", "Resort"]);
+  
+  // Estado para os dados REAIS do banco
+  const [properties, setProperties] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // 1. LÓGICA DE FILTRO: Filtra os hotéis com base no que foi digitado
-  const filteredHotels = hotelsData.filter(hotel => 
-    hotel.name.toLowerCase().includes(searchText.toLowerCase()) || 
-    hotel.location.toLowerCase().includes(searchText.toLowerCase())
+  // 1. BUSCAR DADOS DO FIREBASE
+  useEffect(() => {
+    const fetchProperties = async () => {
+      try {
+        const q = query(collection(db, "properties"), orderBy("createdAt", "desc"));
+        const querySnapshot = await getDocs(q);
+        const list: any[] = [];
+        querySnapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+        setProperties(list);
+      } catch (error) {
+        console.error("Erro ao buscar imóveis:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProperties();
+  }, []);
+
+  // 2. FILTRAR DADOS REAIS
+  const filteredHotels = properties.filter(item => 
+    item.title.toLowerCase().includes(searchText.toLowerCase()) || 
+    item.location.toLowerCase().includes(searchText.toLowerCase())
   );
 
-  // 2. ADICIONAR AO HISTÓRICO: Quando aperta "Enter" no teclado
-  function handleSearchSubmit() {
-    if (searchText.trim() === "") return;
-    
-    // Adiciona ao topo da lista e remove duplicados
-    setHistory(oldHistory => {
-      const newHistory = [searchText, ...oldHistory];
-      return [...new Set(newHistory)].slice(0, 5); // Mantém apenas os 5 últimos
+  // Navegação enviando dados (igual na Home)
+  function handleDetails(item: any) {
+    router.push({
+      pathname: "/stacks/details",
+      params: { data: JSON.stringify(item) } 
     });
-    
-    Keyboard.dismiss(); // Fecha o teclado
   }
 
-  // Remove um item específico do histórico
+  // Histórico
+  function handleSearchSubmit() {
+    if (searchText.trim() === "") return;
+    setHistory(oldHistory => {
+      const newHistory = [searchText, ...oldHistory];
+      return [...new Set(newHistory)].slice(0, 5); 
+    });
+    Keyboard.dismiss(); 
+  }
+
   function removeHistoryItem(itemToRemove: string) {
     setHistory(prev => prev.filter(item => item !== itemToRemove));
   }
 
-  // Limpa tudo
   function clearAllHistory() {
     setHistory([]);
   }
 
-  // Clica no histórico e preenche a busca
   function handleHistoryClick(text: string) {
     setSearchText(text);
   }
 
   const renderHotelItem = ({ item }: { item: any }) => (
-    <Pressable onPress={() => router.push("/stacks/details")} style={styles.card}>
+    <Pressable onPress={() => handleDetails(item)} style={styles.card}>
       <View style={styles.cardLeftContent}>
-        <Image style={styles.cardImage} source={item.image} />
+        <Image 
+          style={styles.cardImage} 
+          // Lógica para imagem real ou placeholder
+          source={item.image ? { uri: item.image } : require("../assets/Room.jpg")} 
+        />
         <View style={styles.cardInfo}>
-          <Text style={styles.cardTitle}>{item.name}</Text>
-          <Text style={styles.cardSubTitle}>{item.location}</Text>
+          <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
+          <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
+             <MapPin size={12} color="#757575" />
+             <Text style={styles.cardSubTitle} numberOfLines={1}>{item.location}</Text>
+          </View>
           
           <View style={styles.ratingContainer}>
             <Star size={14} color="#ffd700" weight="fill" />
-            <Text style={styles.ratingText}>{item.rating} (reviews)</Text>
+            <Text style={styles.ratingText}>{item.rating || 4.5} ({item.reviews || 0} reviews)</Text>
           </View>
         </View>
       </View>
 
       <View style={styles.cardRightContent}>
         <Text style={styles.priceText}>R$ {item.price}</Text>
-        <Text style={styles.priceUnit}>/ noite</Text>
+        <Text style={styles.priceUnit}>
+            {item.type === 'rent' ? '/ noite' : ''}
+        </Text>
         <View style={{ flex: 1 }} /> 
         <BookmarkSimple size={28} color="#1ab65c" weight="regular" />
       </View>
@@ -111,10 +144,9 @@ export default function Search() {
             placeholderTextColor="#757575"
             value={searchText}
             onChangeText={setSearchText}
-            onSubmitEditing={handleSearchSubmit} // Dispara ao apertar Enter/Ok no teclado
+            onSubmitEditing={handleSearchSubmit} 
             returnKeyType="search"
           />
-          {/* Se tiver texto, mostra um X para limpar, senão mostra o ícone de filtro */}
           {searchText.length > 0 ? (
             <TouchableOpacity onPress={() => setSearchText("")}>
                <X size={20} color="#757575" />
@@ -157,54 +189,60 @@ export default function Search() {
       {/* CONTEÚDO */}
       <View style={styles.contentContainer}>
         
-        {/* MODO 1: SEM TEXTO DIGITADO -> MOSTRA HISTÓRICO */}
-        {searchText.length === 0 ? (
-          <View>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recent</Text>
-              <TouchableOpacity onPress={clearAllHistory}>
-                <Text style={styles.clearText}>Clear All</Text>
-              </TouchableOpacity>
-            </View>
-
-            {history.map((item, index) => (
-              <View key={index} style={styles.recentItem}>
-                <TouchableOpacity 
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}
-                  onPress={() => handleHistoryClick(item)}
-                >
-                   <Clock size={20} color="#757575" />
-                   <Text style={styles.recentText}>{item}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => removeHistoryItem(item)}>
-                  <X size={20} color="#757575" />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
+        {loading ? (
+            <ActivityIndicator size="large" color="#1ab65c" style={{marginTop: 50}} />
         ) : (
-          /* MODO 2: COM TEXTO -> MOSTRA LISTA FILTRADA */
-          <View style={{ flex: 1 }}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>
-                Results ({filteredHotels.length})
-              </Text>
-            </View>
-            
-            <FlatList 
-              data={filteredHotels} // Agora usamos a lista filtrada!
-              keyExtractor={(item) => item.id}
-              renderItem={renderHotelItem}
-              contentContainerStyle={{ gap: 16, paddingBottom: 20 }}
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={() => (
-                <Text style={{ color: "#757575", textAlign: "center", marginTop: 20 }}>
-                  Nenhum hotel encontrado com esse nome.
-                </Text>
-              )}
-            />
-          </View>
+            <>
+                {/* MODO 1: SEM TEXTO -> HISTÓRICO */}
+                {searchText.length === 0 ? (
+                  <View>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>Recent</Text>
+                      <TouchableOpacity onPress={clearAllHistory}>
+                        <Text style={styles.clearText}>Clear All</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {history.map((item, index) => (
+                      <View key={index} style={styles.recentItem}>
+                        <TouchableOpacity 
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}
+                          onPress={() => handleHistoryClick(item)}
+                        >
+                          <Clock size={20} color="#757575" />
+                          <Text style={styles.recentText}>{item}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity onPress={() => removeHistoryItem(item)}>
+                          <X size={20} color="#757575" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  /* MODO 2: COM TEXTO -> LISTA FILTRADA REAL */
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>
+                        Results ({filteredHotels.length})
+                      </Text>
+                    </View>
+                    
+                    <FlatList 
+                      data={filteredHotels} 
+                      keyExtractor={(item) => item.id}
+                      renderItem={renderHotelItem}
+                      contentContainerStyle={{ gap: 16, paddingBottom: 20 }}
+                      showsVerticalScrollIndicator={false}
+                      ListEmptyComponent={() => (
+                        <Text style={{ color: "#757575", textAlign: "center", marginTop: 20 }}>
+                          Nenhum imóvel encontrado.
+                        </Text>
+                      )}
+                    />
+                  </View>
+                )}
+            </>
         )}
 
       </View>
@@ -219,8 +257,6 @@ const styles = StyleSheet.create({
     paddingTop: 60, 
     paddingHorizontal: 20,
   },
-
-  // --- HEADER & SEARCH ---
   header: {
     marginBottom: 20,
     flexDirection: "row",
@@ -242,8 +278,6 @@ const styles = StyleSheet.create({
     color: "#f4f4f4",
     fontSize: 16,
   },
-
-  // --- CATEGORIAS ---
   categoriesList: {
     gap: 12,
     paddingRight: 20,
@@ -267,8 +301,6 @@ const styles = StyleSheet.create({
   categoryTextActive: {
     color: "#fff",
   },
-
-  // --- CONTEÚDO ---
   contentContainer: {
     flex: 1,
     marginTop: 20,
@@ -288,8 +320,6 @@ const styles = StyleSheet.create({
     color: "#1ab65c",
     fontWeight: "600",
   },
-
-  // --- BUSCAS RECENTES ---
   recentItem: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -302,8 +332,6 @@ const styles = StyleSheet.create({
     color: "#a1a1aa",
     fontSize: 16,
   },
-
-  // --- CARD DO HOTEL ---
   card: {
     width: "100%",
     backgroundColor: "#1f222a",
@@ -316,6 +344,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 14,
     alignItems: "center",
+    flex: 1, 
   },
   cardImage: {
     width: 90,
@@ -326,12 +355,12 @@ const styles = StyleSheet.create({
   cardInfo: {
     justifyContent: "space-evenly",
     height: 90,
+    flex: 1, 
   },
   cardTitle: {
     color: "#f4f4f4",
     fontSize: 16,
     fontWeight: "700",
-    maxWidth: 130,
   },
   cardSubTitle: {
     color: "#757575",
