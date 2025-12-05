@@ -86,7 +86,7 @@ export default function SelectDate() {
         <TouchableOpacity onPress={() => router.back()}>
           <ArrowLeft size={28} color="#f4f4f4" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Select Date</Text>
+        <Text style={styles.headerTitle}>Selecione Data</Text>
         <View style={{ width: 28 }} />
       </View>
 

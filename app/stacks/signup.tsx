@@ -43,7 +43,7 @@ export default function SignUp() {
         <ArrowLeftIcon size={32} color="#f4f4f4" weight="regular" />
       </TouchableOpacity>
 
-      <Text style={styles.title}>Create your{"\n"}Account</Text>
+      <Text style={styles.title}>Crie sua Conta</Text>
 
       <View style={styles.content}>
         <View style={styles.contentInput}>
@@ -73,17 +73,17 @@ export default function SignUp() {
 
         <View style={styles.rememberContainer}>
           <View style={styles.checkbox} />
-          <Text style={styles.rememberText}>Remember me</Text>
+          <Text style={styles.rememberText}>Lembre de mim</Text>
         </View>
       </View>
 
       <TouchableOpacity style={styles.buttonSignUp} onPress={handleSignUp}>
-        <Text style={styles.buttonSignUpText}>Sign up</Text>
+        <Text style={styles.buttonSignUpText}>Cadastrar</Text>
       </TouchableOpacity>
 
       <View style={styles.separatorContainer}>
         <View style={styles.separator} />
-        <Text style={styles.separatorText}>or continue with</Text>
+        <Text style={styles.separatorText}>Continuar com</Text>
         <View style={styles.separator} />
       </View>
 
@@ -98,9 +98,9 @@ export default function SignUp() {
       </View>
 
       <View style={styles.footerBottom}>
-        <Text style={styles.footerText}>Already have an account?</Text>
+        <Text style={styles.footerText}>Já possui uma conta?</Text>
         <TouchableOpacity onPress={() => router.push("/stacks/login")}>
-          <Text style={styles.footerLink}>Sign in</Text>
+          <Text style={styles.footerLink}>Login</Text>
         </TouchableOpacity>
       </View>
 

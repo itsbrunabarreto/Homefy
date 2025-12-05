@@ -155,31 +155,25 @@ export default function Profile() {
 
                 <ProfileOption
                     icon={<PencilSimpleIcon size={20} color="#fff" />}
-                    label="Edit Profile"
+                    label="Editar Perfil"
                     onPress={() => router.push("/stacks/editProfile")}
                 />
 
                 <ProfileOption
-                    icon={<CreditCardIcon size={20} color="#fff" />}
-                    label="Payment"
-                    onPress={() => router.push("/stacks/payment")}
-                />
-
-                <ProfileOption
                     icon={<BellIcon size={20} color="#fff" />}
-                    label="Notifications"
+                    label="Notificações"
                     onPress={() => router.push("/stacks/configNotifications")}
                 />
 
                 <ProfileOption
                     icon={<ShieldCheckIcon size={20} color="#fff" />}
-                    label="Security"
+                    label="Segurança"
                     onPress={() => router.push("/stacks/security")}
                 />
 
                 <ProfileOption
                     icon={<InfoIcon size={20} color="#fff" />}
-                    label="Help"
+                    label="Ajuda"
                     onPress={() => {}}
                 />
 

@@ -21,6 +21,14 @@ export default function Booking() {
   
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Traduzindo as abas (mas mantendo o valor original para lógica)
+  const tabs = [
+    { label: "Ativas", value: "Ongoing" },
+    { label: "Concluídas", value: "Completed" },
+    { label: "Canceladas", value: "Canceled" },
+  ];
+
   const [activeTab, setActiveTab] = useState<"Ongoing" | "Completed" | "Canceled">("Ongoing");
 
   const fetchBookings = async () => {
@@ -40,7 +48,7 @@ export default function Booking() {
         list.push({ id: doc.id, ...doc.data() });
       });
 
-      // Ordenação manual por data
+      // Ordenação por data
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
       setBookings(list);
@@ -60,11 +68,16 @@ export default function Booking() {
   const filteredData = bookings.filter(item => (item.status || "Ongoing") === activeTab);
 
   const renderItem = ({ item }: { item: any }) => {
+    const statusText =
+      item.status === "Ongoing" ? "Confirmada" :
+      item.status === "Completed" ? "Concluída" :
+      item.status === "Canceled" ? "Cancelada" :
+      item.status;
+
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <Image 
-            // Fallback de imagem
             source={item.image ? { uri: item.image } : require("../assets/Room.jpg")} 
             style={styles.cardImage} 
           />
@@ -86,7 +99,7 @@ export default function Booking() {
                 item.status === "Ongoing" ? { color: "#1ab65c" } : 
                 item.status === "Canceled" ? { color: "#ff4d4d" } : { color: "#fff" }
               ]}>
-                {item.status === "Ongoing" ? "Confirmed" : item.status}
+                {statusText}
               </Text>
             </View>
           </View>
@@ -95,6 +108,8 @@ export default function Booking() {
         <View style={styles.divider} />
 
         <View style={styles.actionRow}>
+          
+          {/* BOTÕES PARA RESERVA EM ANDAMENTO */}
           {item.status === "Ongoing" && (
             <>
               <TouchableOpacity 
@@ -104,7 +119,7 @@ export default function Booking() {
                     params: { data: JSON.stringify(item) }
                 })}
               >
-                <Text style={styles.btnOutlineText}>Cancel Booking</Text>
+                <Text style={styles.btnOutlineText}>Cancelar Reserva</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -114,11 +129,12 @@ export default function Booking() {
                     params: { data: JSON.stringify(item) }
                 })}
               >
-                <Text style={styles.btnFilledText}>View Ticket</Text>
+                <Text style={styles.btnFilledText}>Ver Ticket</Text>
               </TouchableOpacity>
             </>
           )}
 
+          {/* BOTÃO PARA RESERVAS CONCLUÍDAS */}
           {item.status === "Completed" && (
             <TouchableOpacity 
                 style={[styles.btnFilled, { flex: 1 }]}
@@ -133,13 +149,14 @@ export default function Booking() {
                     }) }
                 })}
             >
-               <Text style={styles.btnFilledText}>Book Again</Text>
+               <Text style={styles.btnFilledText}>Reservar Novamente</Text>
             </TouchableOpacity>
           )}
 
+          {/* TEXTO PARA RESERVAS CANCELADAS */}
           {item.status === "Canceled" && (
              <Text style={styles.refundText}>
-               Canceled on {item.canceledAt ? new Date(item.canceledAt).toLocaleDateString() : "Unknown date"}
+               Cancelada em {item.canceledAt ? new Date(item.canceledAt).toLocaleDateString("pt-BR") : "Data desconhecida"}
              </Text>
           )}
         </View>
@@ -154,7 +171,7 @@ export default function Booking() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
            <Image source={require("../assets/logo.png")} style={styles.logoImage} />
-           <Text style={styles.headerTitle}>My Booking</Text>
+           <Text style={styles.headerTitle}>Minhas Reservas</Text>
         </View>
         <TouchableOpacity>
            <MagnifyingGlass size={28} color="#f4f4f4" />
@@ -163,26 +180,26 @@ export default function Booking() {
 
       {/* TABS */}
       <View style={styles.tabsContainer}>
-        {["Ongoing", "Completed", "Canceled"].map((tab) => (
+        {tabs.map((tab) => (
           <TouchableOpacity 
-            key={tab}
+            key={tab.value}
             style={[
               styles.tabButton, 
-              activeTab === tab && styles.tabButtonActive
+              activeTab === tab.value && styles.tabButtonActive
             ]}
-            onPress={() => setActiveTab(tab as any)}
+            onPress={() => setActiveTab(tab.value as any)}
           >
             <Text style={[
               styles.tabText,
-              activeTab === tab && styles.tabTextActive
+              activeTab === tab.value && styles.tabTextActive
             ]}>
-              {tab}
+              {tab.label}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* CONTEÚDO */}
+      {/* LISTA */}
       {loading ? (
         <ActivityIndicator size="large" color="#1ab65c" style={{ marginTop: 50 }} />
       ) : (
@@ -196,7 +213,7 @@ export default function Booking() {
              <View style={{ alignItems: 'center', marginTop: 50 }}>
                <Receipt size={64} color="#333" />
                <Text style={{ color: '#757575', marginTop: 10 }}>
-                 No {activeTab.toLowerCase()} bookings found.
+                 Nenhuma reserva encontrada em "{tabs.find(t => t.value === activeTab)?.label}".
                </Text>
              </View>
           )}

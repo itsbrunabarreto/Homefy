@@ -49,7 +49,7 @@ export default function NameReservation() {
         <TouchableOpacity onPress={() => router.back()}>
           <ArrowLeft size={28} color="#f4f4f4" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Name of Reservation</Text>
+        <Text style={styles.headerTitle}>Nome na Reserva</Text>
         <View style={{ width: 28 }} />
       </View>
 

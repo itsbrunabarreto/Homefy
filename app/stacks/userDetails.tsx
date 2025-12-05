@@ -96,8 +96,6 @@ export default function UserDetails() {
         email,
         phoneNumber,
         gender,
-        // Aqui salvamos o TEXTO da imagem direto no banco. 
-        // Se o usuário não escolheu foto, enviamos null.
         avatarUrl: profileImage || null, 
         createdAt: new Date().toISOString(),
       };

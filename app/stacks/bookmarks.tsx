@@ -6,8 +6,8 @@ import {
   FlatList, 
   TouchableOpacity, 
   Image, 
-  Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Modal
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 
@@ -18,7 +18,7 @@ import {
   BookmarkIcon, 
   SquaresFourIcon, 
   ListIcon,
-  SmileySad // Caso não funcione, troque por StarIcon
+  SmileySad
 } from "phosphor-react-native";
 
 // Firebase
@@ -28,10 +28,16 @@ import { collection, getDocs, deleteDoc, doc, query, where } from "firebase/fire
 export default function Bookmarks() {
   const router = useRouter();
 
+  // Estados
   const [isGrid, setIsGrid] = useState(true);
   const [bookmarks, setBookmarks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Estados para o Modal de Remoção
+  const [removeModalVisible, setRemoveModalVisible] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+
+  // --- BUSCA DADOS ---
   const fetchBookmarks = async () => {
     try {
       const user = auth.currentUser;
@@ -46,7 +52,6 @@ export default function Bookmarks() {
       const list: any[] = [];
       
       querySnapshot.forEach((doc) => {
-        // O segredo está aqui: bookmarkId é o ID do documento que vamos apagar
         list.push({ bookmarkId: doc.id, ...doc.data() });
       });
 
@@ -64,40 +69,29 @@ export default function Bookmarks() {
     }, [])
   );
 
-  // --- FUNÇÃO DE REMOVER ---
-  async function handleRemoveBookmark(bookmarkId: string) {
-    console.log("Tentando remover ID:", bookmarkId); // Debug
+  // --- ABRIR O MODAL ---
+  function onRequestRemove(item: any) {
+    setSelectedItem(item);
+    setRemoveModalVisible(true);
+  }
 
-    if (!bookmarkId) {
-        Alert.alert("Erro", "ID do favorito inválido.");
-        return;
+  // --- CONFIRMAR REMOÇÃO ---
+  async function confirmRemove() {
+    if (!selectedItem) return;
+
+    try {
+      // 1. Deleta do Firestore
+      await deleteDoc(doc(db, "bookmarks", selectedItem.bookmarkId));
+      
+      // 2. Remove da tela
+      setBookmarks(prev => prev.filter(item => item.bookmarkId !== selectedItem.bookmarkId));
+      
+      // 3. Fecha o modal
+      setRemoveModalVisible(false);
+      setSelectedItem(null);
+    } catch (error) {
+      console.error("Erro ao remover:", error);
     }
-
-    Alert.alert(
-      "Remover",
-      "Deseja tirar este item dos favoritos?",
-      [
-        { text: "Não", style: "cancel" },
-        { 
-          text: "Sim, remover", 
-          style: "destructive", 
-          onPress: async () => {
-            try {
-              console.log("Deletando do banco...");
-              // 1. Remove do Banco
-              await deleteDoc(doc(db, "bookmarks", bookmarkId));
-              console.log("Deletado com sucesso!");
-
-              // 2. Remove da Tela
-              setBookmarks(prev => prev.filter(item => item.bookmarkId !== bookmarkId));
-            } catch (error) {
-              console.error("Erro ao deletar:", error);
-              Alert.alert("Erro", "Não foi possível remover.");
-            }
-          }
-        }
-      ]
-    );
   }
 
   const handleDetails = (item: any) => {
@@ -142,15 +136,13 @@ export default function Bookmarks() {
               <Text style={styles.priceUnit}> / noite</Text>
             </View>
             
-            {/* BOTÃO DE REMOVER CORRIGIDO */}
-            {/* Adicionamos zIndex e hitSlop para garantir o clique */}
+            {/* Botão que abre o Modal */}
             <TouchableOpacity 
-                style={styles.removeButton}
                 onPress={(e) => {
-                    e.stopPropagation(); // Impede que o clique abra os detalhes
-                    handleRemoveBookmark(item.bookmarkId);
+                    e.stopPropagation();
+                    onRequestRemove(item);
                 }}
-                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
                <BookmarkIcon size={24} color="#1ab65c" weight="fill" />
             </TouchableOpacity>
@@ -162,6 +154,7 @@ export default function Bookmarks() {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <ArrowLeftIcon size={28} color="#f4f4f4" />
@@ -196,12 +189,10 @@ export default function Bookmarks() {
           data={bookmarks}
           keyExtractor={item => item.bookmarkId} 
           renderItem={renderBookmarkItem}
-          
           numColumns={isGrid ? 2 : 1}
           columnWrapperStyle={isGrid ? { justifyContent: 'space-between' } : undefined}
           contentContainerStyle={{ paddingBottom: 20, gap: 16 }}
           showsVerticalScrollIndicator={false}
-          
           ListEmptyComponent={() => (
               <View style={{ alignItems: 'center', marginTop: 80 }}>
                   <SmileySad size={64} color="#333" />
@@ -212,6 +203,66 @@ export default function Bookmarks() {
           )}
         />
       )}
+
+      {/* MODAL PERSONALIZADO DE REMOÇÃO */}
+      <Modal
+        transparent
+        visible={removeModalVisible}
+        animationType="fade"
+        onRequestClose={() => setRemoveModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+                <Text style={styles.modalTitle}>Remover dos Favoritos?</Text>
+                
+                <View style={styles.modalDivider} />
+
+                {/* Cartãozinho do Imóvel dentro do Modal */}
+                {selectedItem && (
+                    <View style={styles.modalCard}>
+                        <Image 
+                            source={selectedItem.image ? { uri: selectedItem.image } : require("../assets/Room.jpg")} 
+                            style={styles.modalImage} 
+                        />
+                        <View style={{flex: 1, justifyContent: 'center', gap: 4}}>
+                            <Text style={styles.modalCardTitle} numberOfLines={1}>
+                                {selectedItem.title}
+                            </Text>
+                            <Text style={styles.modalCardLocation} numberOfLines={1}>
+                                {selectedItem.location}
+                            </Text>
+                            <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
+                                <StarIcon size={12} color="#ffd700" weight="fill" />
+                                <Text style={styles.modalCardRating}>{selectedItem.rating}</Text>
+                            </View>
+                        </View>
+                        <View style={{alignItems: 'flex-end', justifyContent: 'center'}}>
+                            <Text style={styles.modalCardPrice}>R${selectedItem.price}</Text>
+                            <Text style={styles.modalCardUnit}>/noite</Text>
+                            <BookmarkIcon size={20} color="#1ab65c" weight="fill" style={{marginTop: 4}} />
+                        </View>
+                    </View>
+                )}
+
+                <View style={styles.modalButtonsRow}>
+                    <TouchableOpacity 
+                        style={[styles.modalButton, styles.btnCancel]}
+                        onPress={() => setRemoveModalVisible(false)}
+                    >
+                        <Text style={styles.btnCancelText}>Cancelar</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                        style={[styles.modalButton, styles.btnConfirm]}
+                        onPress={confirmRemove}
+                    >
+                        <Text style={styles.btnConfirmText}>Sim, Remover</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -234,6 +285,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#f4f4f4",
   },
+  // Cards
   cardGrid: {
     backgroundColor: "#1f222a",
     width: "48%", 
@@ -297,8 +349,103 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 3,
   },
-  removeButton: {
-    zIndex: 10, // Garante que fique acima do card
-    padding: 5, // Área extra visual
-  }
+  // --- ESTILOS DO MODAL ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "flex-end", // Bottom sheet style ou center
+    alignItems: "center",
+    paddingBottom: 40,
+  },
+  modalContainer: {
+    width: "90%",
+    backgroundColor: "#1f222a", // Card Color
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#f4f4f4",
+    marginBottom: 16,
+  },
+  modalDivider: {
+    height: 1,
+    width: "100%",
+    backgroundColor: "#333",
+    marginBottom: 16,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: "#181a20", // Fundo um pouco mais escuro para destacar
+    borderRadius: 16,
+    padding: 12,
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 24,
+  },
+  modalImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 12,
+    backgroundColor: "#333",
+  },
+  modalCardTitle: {
+    color: "#f4f4f4",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  modalCardLocation: {
+    color: "#757575",
+    fontSize: 12,
+  },
+  modalCardRating: {
+    color: "#757575",
+    fontSize: 11,
+  },
+  modalCardPrice: {
+    color: "#1ab65c",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  modalCardUnit: {
+    color: "#757575",
+    fontSize: 10,
+  },
+  modalButtonsRow: {
+    flexDirection: "row",
+    gap: 16,
+    width: "100%",
+  },
+  modalButton: {
+    flex: 1,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  btnCancel: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  btnCancelText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  btnConfirm: {
+    backgroundColor: "#1ab65c",
+    shadowColor: "#1ab65c",
+    shadowOpacity: 0.4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+  },
+  btnConfirmText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
 });

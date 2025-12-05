@@ -16,7 +16,7 @@ import * as ImagePicker from "expo-image-picker";
 
 // Firebase
 import { auth, db } from "../../firebaseConfig";
-// IMPORTANTE: Trocamos updateDoc por setDoc aqui
+
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
 // Ícones
@@ -79,7 +79,7 @@ export default function EditProfile() {
     fetchUserData();
   }, []);
 
-  // 2. Função para trocar a foto
+
   async function handleSelectImage() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -99,7 +99,7 @@ export default function EditProfile() {
     }
   }
 
-  // 3. Função de Salvar (Agora cria OU edita)
+
   async function handleUpdate() {
     // Validação
     if (!fullName || !nickname || !birthDate) {
@@ -119,8 +119,6 @@ export default function EditProfile() {
 
       const userDocRef = doc(db, "users", user.uid);
 
-      // A MÁGICA: setDoc com merge: true
-      // Isso cria o documento se faltar, ou atualiza se já existir.
       await setDoc(userDocRef, {
         fullName,
         nickname,
@@ -128,7 +126,7 @@ export default function EditProfile() {
         phoneNumber,
         gender,
         avatarUrl: profileImage,
-        email: email, // Garante que o email fique salvo no banco também
+        email: email,
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
@@ -164,7 +162,7 @@ export default function EditProfile() {
         <TouchableOpacity onPress={() => router.back()}>
           <ArrowLeftIcon size={28} color="#f4f4f4" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <Text style={styles.headerTitle}>Editar Perfil</Text>
         <View style={{ width: 28 }} />
       </View>
 
